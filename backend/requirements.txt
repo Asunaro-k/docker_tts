@@ -1,0 +1,5 @@
+streamlit
+websockets
+groq
+sounddevice
+scipy

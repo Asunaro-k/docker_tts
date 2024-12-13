@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  whisper-app:
+    build: .
+    ports:
+      - "8765:8765"  # WebSocket
+      - "8000:8000"  # Streamlit
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env
+    # devices:
+    #   - "/dev/snd:/dev/snd"  # オーディオデバイスへのアクセス
