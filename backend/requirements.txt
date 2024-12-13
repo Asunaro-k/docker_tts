@@ -3,3 +3,5 @@ websockets
 groq
 sounddevice
 scipy
+audio-recorder-streamlit
+ffmpeg-python

@@ -3,8 +3,7 @@ services:
   whisper-app:
     build: .
     ports:
-      - "8765:8765"  # WebSocket
-      - "8000:8000"  # Streamlit
+      - "8501:8501"  # Streamlit
     volumes:
       - ./backend:/app
     env_file:

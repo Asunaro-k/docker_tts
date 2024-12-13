@@ -1,67 +1,63 @@
-import streamlit as st
-import websockets
-import asyncio
 import groq
-import sounddevice as sd
-import scipy.io.wavfile as wav
+import streamlit as st
+from audio_recorder_streamlit import audio_recorder
+from tempfile import NamedTemporaryFile
+import ffmpeg
 import io
-import base64
 
-# Groq APIクライアントの初期化
-groq_client = groq.Groq()
+def convert_audio_format(audio_bytes, target_format="mp3"):
+    import ffmpeg
+    from tempfile import NamedTemporaryFile
 
-# オーディオ録音パラメータ
-SAMPLE_RATE = 16000
-CHANNELS = 1
-RECORD_SECONDS = 5
+    with NamedTemporaryFile(delete=True, suffix=".wav") as temp_file:
+        temp_file.write(audio_bytes)
+        temp_file.flush()
 
-def record_audio():
-    """sounddeviceを使用して音声を録音"""
-    st.info("音声録音中...")
-    recording = sd.rec(
-        int(RECORD_SECONDS * SAMPLE_RATE), 
-        samplerate=SAMPLE_RATE, 
-        channels=CHANNELS,
-        dtype='int16'
-    )
-    sd.wait()
-    
-    # メモリ上のwavファイルとして保存
-    wav_buffer = io.BytesIO()
-    wav.write(wav_buffer, SAMPLE_RATE, recording)
-    wav_buffer.seek(0)
-    
-    return wav_buffer.getvalue()
+        with NamedTemporaryFile(delete=True, suffix=f".{target_format}") as converted_file:
+            try:
+                # overwrite_output() を追加
+                ffmpeg.input(temp_file.name).output(converted_file.name).overwrite_output().run()
+                # 変換されたファイルの内容を返す
+                return converted_file.read()
+            except ffmpeg._run.Error as e:
+                #print("FFmpeg error:", e.stderr)  # 標準エラー出力を表示
+                raise
 
-async def transcribe_audio(audio_data):
-    """Groq APIを使用して音声をテキストに変換"""
+
+        
+def transcribe_audio_to_text(audio_bytes):
+    groq_client = groq.Groq()
     try:
-        # Base64エンコードされた音声データ
-        base64_audio = base64.b64encode(audio_data).decode('utf-8')
-        
-        # Groq Whisper APIへのリクエスト
-        response = groq_client.audio.transcriptions.create(
-            file=base64_audio,
-            model="whisper-large-v3-turbo",
-            response_format="text"
-        )
-        
-        return response
-    except Exception as e:
-        st.error(f"文字起こし中にエラーが発生: {e}")
-        return ""
+        with NamedTemporaryFile(delete=True, suffix=".wav") as temp_file:
+            temp_file.write(audio_bytes)
+            temp_file.flush()
+            with open(temp_file.name, "rb") as audio_file:
+                response = groq_client.audio.transcriptions.create(
+                    model="whisper-large-v3-turbo", file=audio_file, response_format="text"
+                )
+                return response
+    except groq.BadRequestError as e:
+        st.error(f"Error transcribing audio: {e}")
+        return None
 
+# Example usage with Streamlit:
 def main():
-    st.title("Groq Whisper音声文字起こしアプリ")
+    st.title("Voice to Text Transcription")
     
-    if st.button("音声録音と文字起こし"):
-        # 音声録音
-        audio_data = record_audio()
+    # Record audio using Streamlit widget
+    audio_bytes = audio_recorder(pause_threshold=30)
+    
+    if audio_bytes:
+        # Convert audio if necessary (e.g., from wav to mp3)
+        audio_bytes = convert_audio_format(audio_bytes, target_format="mp3")
         
-        # 文字起こし
-        transcription = asyncio.run(transcribe_audio(audio_data))
+        # Convert audio to text using Groq API
+        transcript = transcribe_audio_to_text(audio_bytes)
         
-        st.text_area("文字起こし結果:", value=transcription, height=200)
+        if transcript:
+            st.write("Transcribed Text:", transcript)
+        else:
+            st.write("Transcription failed.")
 
 if __name__ == "__main__":
     main()
