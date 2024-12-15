@@ -4,12 +4,10 @@ from audio_recorder_streamlit import audio_recorder
 from tempfile import NamedTemporaryFile
 import ffmpeg
 import io
-import rlvoice
-
-# Initialize TTS engine
-def initialize_tts_engine():
-    engine = rlvoice.init()
-    return engine
+import edge_tts
+from edge_tts import VoicesManager
+import random
+import asyncio
 
 def convert_audio_format(audio_bytes, target_format="mp3"):
     import ffmpeg
@@ -48,18 +46,19 @@ def transcribe_audio_to_text(audio_bytes):
     
 
 # Text-to-Speech function
-def text_to_speech(text):
+async def text_to_speech(text):
     try:
-        engine = initialize_tts_engine()
-
+        voices = await VoicesManager.create()  # 非同期関数として呼び出す
+        voice = voices.find(Gender="Female", Language="ja")
+        
         # ユニークな一時ファイルをセッションごとに作成
         if 'tts_audio_path' not in st.session_state:
             temp_file = NamedTemporaryFile(delete=False, suffix=".mp3")
             st.session_state.tts_audio_path = temp_file.name
 
         # ファイルに音声を保存
-        engine.save_to_file(text, st.session_state.tts_audio_path)
-        engine.runAndWait()
+        communicate = edge_tts.Communicate(text, random.choice(voice)["Name"])
+        await communicate.save(st.session_state.tts_audio_path)  # 非同期で保存
 
         return st.session_state.tts_audio_path  # ユニークな一時ファイルパスを返す
     except Exception as e:
@@ -102,12 +101,12 @@ def main():
                 st.write(generated_text)
                 
                 # Convert to speech and store in session state
-                audio_path  = text_to_speech(generated_text)
+                audio_path = asyncio.run(text_to_speech(generated_text))
                 
                 if audio_path :
                     # Play audio directly from memory
                     st.audio(audio_path, format='audio/mp3')
-                    st.success(f"Audio file saved to temporary location: {st.session_state.tts_audio_path}")
+                    #st.success(f"Audio file saved to temporary location: {st.session_state.tts_audio_path}")
     
     # Record audio using Streamlit widget
     audio_bytes = audio_recorder(
