@@ -8,6 +8,20 @@ import edge_tts
 from edge_tts import VoicesManager
 import random
 import asyncio
+from langchain.prompts import PromptTemplate
+from langchain_groq import ChatGroq
+import re
+
+# 音声生成のためのプロンプト
+TTS_PROMPT = """
+あなたは与えられた文章に対して、以下の判断を行うアシスタントです：
+1. この言語が日本語なのか英語なのか
+
+文章: {prompt}
+
+以下の形式で応答してください：
+language_jp: [true/false] - 日本語の場合は場合はtrue
+"""
 
 def convert_audio_format(audio_bytes, target_format="mp3"):
     import ffmpeg
@@ -46,10 +60,10 @@ def transcribe_audio_to_text(audio_bytes):
     
 
 # Text-to-Speech function
-async def text_to_speech(text):
+async def text_to_speech(text,language="ja"):
     try:
         voices = await VoicesManager.create()  # 非同期関数として呼び出す
-        voice = voices.find(Gender="Female", Language="ja")
+        voice = voices.find(Gender="Female", Language=language)
         
         # ユニークな一時ファイルをセッションごとに作成
         if 'tts_audio_path' not in st.session_state:
@@ -87,6 +101,12 @@ def main():
 
     if 'skip_first_attempt' not in st.session_state:
         st.session_state.skip_first_attempt=True
+
+
+    groq_client = ChatGroq()
+    tts_prompt = PromptTemplate(template=TTS_PROMPT, input_variables=["prompt"])
+    tts_chain = tts_prompt | groq_client
+
     
     # Record audio using Streamlit widget
     audio_bytes = audio_recorder(
@@ -125,9 +145,19 @@ def main():
                 # Display generated text
                 st.write("Generated Text:")
                 st.write(generated_text)
+                language = "ja"
+                analysis = asyncio.run(tts_chain.ainvoke(generated_text))
+                content = analysis.content if hasattr(analysis, 'content') else str(analysis)
+                language_flag = "language_jp: true" in content
+                if language_flag:
+                    language = "ja"
+                else:
+                    language = "en"
+                # st.markdown(content)
+                # st.markdown(language)
                 
                 # Convert to speech and store in session state
-                audio_path = asyncio.run(text_to_speech(generated_text))
+                audio_path = asyncio.run(text_to_speech(generated_text,language))
                 
                 if audio_path :
                     # Play audio directly from memory

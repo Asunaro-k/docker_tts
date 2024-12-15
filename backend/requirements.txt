@@ -6,3 +6,5 @@ scipy
 audio-recorder-streamlit
 ffmpeg-python
 edge-tts
+langchain
+langchain-groq
